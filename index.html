@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI 骨骼绑定器</title>
+  <meta name="description" content="上传无骨骼 GLB，用 Claude 自动布骨、蒙皮，并用对话编排动作与舞蹈。" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230071e3'/%3E%3Cg stroke='%23fff' stroke-width='2.4' stroke-linecap='round' fill='none'%3E%3Ccircle cx='16' cy='8' r='3'/%3E%3Cpath d='M16 11v8M16 19l-5 7M16 19l5 7M9 14h14'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="src/tokens.css" />
+  <link rel="stylesheet" href="src/app.css" />
+  <script>
+    try {
+      const t = localStorage.getItem('rigger.theme');
+      const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) document.documentElement.dataset.theme = 'dark';
+    } catch {}
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
+        "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.15/src/index.js",
+        "@anthropic-ai/sdk": "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.133.0/+esm"
+      }
+    }
+  </script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="2.3"/><path d="M12 7.5v7M12 14.5l-4 6M12 14.5l4 6M6 10.5h12"/></svg>
+      </span>
+      <span class="brand-name">AI 骨骼绑定器</span>
+      <span class="brand-sub">GLB → 骨骼 → 动作编排</span>
+    </div>
+    <div class="steps" id="steps">
+      <span class="step" data-step="1">模型</span>
+      <span class="step" data-step="2">布骨</span>
+      <span class="step" data-step="3">蒙皮</span>
+      <span class="step" data-step="4">动作</span>
+    </div>
+    <div class="topbar-right">
+      <button class="status-pill" id="providerBadge" title="AI 通道设置"><i class="dot"></i><span>检测中…</span></button>
+      <button class="icon-btn" id="btnTheme" title="切换深浅色">
+        <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+      </button>
+      <button class="icon-btn" id="btnSettings" title="设置">
+        <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="side side-left">
+      <section class="card">
+        <div class="card-head"><span class="num">1</span><h3>模型</h3></div>
+        <label class="drop" id="drop">
+          <input type="file" id="fileInput" accept=".glb,.gltf" hidden />
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>
+          <span>拖入或点击选择 <b>GLB</b></span>
+        </label>
+        <div class="row">
+          <input class="input grow" id="urlInput" placeholder="或粘贴 GLB 链接" />
+          <button class="btn btn-sm" id="btnUrl">加载</button>
+        </div>
+        <div class="row">
+          <button class="btn btn-sm grow" id="btnDemo">使用演示人偶</button>
+        </div>
+        <div class="meta" id="modelMeta">尚未加载模型</div>
+        <div class="sub-label">朝向修正（要求：Y 向上、面朝 +Z）</div>
+        <div class="row wrap">
+          <button class="chip" data-rot="x">绕 X 转 90°</button>
+          <button class="chip" data-rot="y">绕 Y 转 90°</button>
+          <button class="chip" data-rot="z">绕 Z 转 90°</button>
+          <button class="chip" data-rot="reset">重置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><span class="num">2</span><h3>骨骼</h3></div>
+        <textarea class="input" id="rigHint" rows="2" placeholder="可选：描述模型，例如“Q 版女孩，有马尾和短裙”“四足狐狸，大尾巴”"></textarea>
+        <div class="row">
+          <button class="btn btn-primary grow" id="btnAiRig">AI 自动布骨</button>
+          <button class="btn" id="btnAiRefine" title="把当前骨骼画在截图上让 AI 检查并修正">AI 校正</button>
+        </div>
+        <div class="row wrap">
+          <button class="chip" id="btnTemplate">人形模板</button>
+          <button class="chip" id="btnSnap">吸附居中</button>
+          <button class="chip" id="btnSym">左右对称</button>
+          <button class="chip" id="btnEdit">编辑关节</button>
+        </div>
+        <div class="joint-list" id="jointList"><div class="empty">还没有骨骼</div></div>
+        <div class="row wrap joint-tools" id="jointTools" hidden>
+          <button class="chip" id="btnAddJoint">加子关节</button>
+          <button class="chip" id="btnRenameJoint">重命名</button>
+          <button class="chip" id="btnDelJoint">删除</button>
+        </div>
+        <div class="divider"></div>
+        <div class="card-head small"><span class="num">3</span><h3>蒙皮</h3></div>
+        <div class="row">
+          <button class="btn grow" id="btnBind">计算权重并绑定</button>
+        </div>
+        <div class="progress" id="bindProgress" hidden><div></div></div>
+        <label class="form-check"><input type="checkbox" id="chkWeights" /> 显示所选骨骼权重</label>
+        <label class="form-check"><input type="checkbox" id="chkBones" /> 显示骨架</label>
+        <label class="form-check"><input type="checkbox" id="chkVis" checked /> 可见性校正（更准、稍慢）</label>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><span class="num">↧</span><h3>导出 / 导入</h3></div>
+        <div class="row wrap">
+          <button class="btn btn-sm" id="btnExportGlb">导出 GLB（骨骼+动画）</button>
+          <button class="btn btn-sm" id="btnExportAnim">导出动画 JSON</button>
+          <button class="btn btn-sm" id="btnImportAnim">导入动画 JSON</button>
+          <button class="btn btn-sm" id="btnExportRig">导出骨骼 JSON</button>
+          <button class="btn btn-sm" id="btnImportRig">导入骨骼 JSON</button>
+        </div>
+        <input type="file" id="jsonInput" accept=".json" hidden />
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="viewport" id="viewport"></div>
+      <div class="stage-tip" id="stageTip">把 GLB 拖进来，或使用演示人偶</div>
+      <div class="busy" id="busy" hidden><div class="spinner"></div><span id="busyText">处理中…</span></div>
+      <div class="timeline" id="timeline">
+        <button class="tl-play" id="btnPlay" title="播放 / 暂停（空格）">
+          <svg id="icoPlay" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>
+          <svg id="icoPause" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" hidden><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        </button>
+        <select class="input tl-clip" id="clipSelect"><option value="">无动画</option></select>
+        <input type="range" id="scrub" min="0" max="1000" value="0" class="grow" />
+        <span class="tabular tl-time" id="timeLabel">0.00 / 0.00</span>
+        <select class="input tl-speed" id="speedSelect" title="速度">
+          <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+        </select>
+        <button class="icon-btn" id="btnUndoClip" title="回到上一版">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        </button>
+        <button class="icon-btn" id="btnDelClip" title="删除当前动画">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <aside class="side side-right chat">
+      <div class="card chat-card">
+        <div class="card-head"><span class="num">4</span><h3>AI 动作编排</h3><span class="grow"></span><button class="icon-btn" id="btnNewChat" title="新对话"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
+        <div class="chat-log" id="chatLog">
+          <div class="msg ai intro">绑定完成后，用一句话告诉我想要的动作：可以是“挥手打招呼”，也可以是“编一段 30 秒、120 BPM 的街舞，有 4 个段落”。我会生成动画并立即播放，你可以继续让我修改。</div>
+        </div>
+        <div class="quick" id="quick">
+          <button class="chip" data-q="自然地挥手打招呼，循环">挥手</button>
+          <button class="chip" data-q="原地走路循环，手臂自然摆动">走路</button>
+          <button class="chip" data-q="原地跳跃两次，有蓄力和落地缓冲">跳跃</button>
+          <button class="chip" data-q="编一段 20 秒、120 BPM 的流行舞，分成 4 个段落，有律动和定格结尾">舞蹈 20s</button>
+          <button class="chip" data-preset="idle">待机（离线）</button>
+        </div>
+        <div class="composer">
+          <textarea class="input" id="chatInput" rows="2" placeholder="描述动作，或让我修改当前动画…（Enter 发送，Shift+Enter 换行）"></textarea>
+          <button class="btn btn-primary" id="btnSend">发送</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="modal-overlay" id="settingsModal" hidden>
+  <div class="modal settings">
+    <div class="modal-header">设置<button class="modal-x" data-close>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="modal-body form">
+      <div>
+        <div class="form-label">AI 通道</div>
+        <div class="segmented" id="providerSeg">
+          <button data-v="local">本地订阅（Claude Code）</button>
+          <button data-v="api">Anthropic API Key</button>
+        </div>
+        <p class="hint" id="providerHint"></p>
+      </div>
+      <div id="apiFields">
+        <div class="form-label">API Key</div>
+        <input class="input full" id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+        <label class="form-check"><input type="checkbox" id="rememberKey" /> 在本浏览器记住（否则关闭标签页即清除）</label>
+        <p class="hint">Key 只保存在你的浏览器中，请求从浏览器直连 api.anthropic.com，不经过任何第三方服务器。</p>
+      </div>
+      <div class="form-row"><span class="form-label">模型</span><select class="input" id="modelSelect"></select></div>
+      <div class="form-row"><span class="form-label">思考强度</span>
+        <select class="input" id="effortSelect">
+          <option value="low">low（最快）</option><option value="medium">medium</option><option value="high">high（推荐）</option><option value="xhigh">xhigh</option><option value="max">max（最慢）</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="test-result" id="testResult"></span>
+      <button class="btn" id="btnTest">测试连接</button>
+      <button class="btn btn-primary" data-close>完成</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-host" id="toasts"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

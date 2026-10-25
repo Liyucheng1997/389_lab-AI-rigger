@@ -1,0 +1,11 @@
+{
+  "name": "ai-rigger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "用 Claude 给无骨骼 GLB 自动布骨、蒙皮，并通过对话编排动作",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
