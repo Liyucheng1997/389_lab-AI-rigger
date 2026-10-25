@@ -47,7 +47,8 @@ export function saveSettings() {
 
 let localAvailable = null;
 export async function detectLocal() {
-  if (location.protocol === 'file:') return (localAvailable = false);
+  // 本地桥接只会跑在本机；部署到 GitHub Pages 等站点时不去探测，避免控制台 404
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) return (localAvailable = false);
   try {
     const r = await fetch('/api/health', { headers: { 'X-Rigger': '1' } });
     localAvailable = r.ok && (await r.json()).ok === true;

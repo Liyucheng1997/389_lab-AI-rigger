@@ -2,6 +2,8 @@
 
 上传没有骨骼的 GLB，让 Claude 看图自动布骨、自动计算蒙皮权重，再用对话编排动作：从“挥手”到一整段多段落舞蹈都可以。结果能导出成带骨骼和动画的 GLB。
 
+**在线版：https://liyucheng1997.github.io/389_lab-AI-rigger/**（打开后在“设置”里填你自己的 Anthropic API Key 即可使用，Key 只保存在你的浏览器里）
+
 纯前端页面（three.js），AI 有两种通道：
 
 | 通道 | 用途 | 计费 |
@@ -34,7 +36,7 @@ npm start
 
 ## 部署成网站（API Key 模式）
 
-整个前端是静态文件：`index.html` + `src/`，依赖从 jsDelivr CDN 加载，不需要构建。上传到任意静态托管（GitHub Pages、Cloudflare Pages、Nginx……）即可。
+整个前端是静态文件：`index.html` + `src/`，依赖从 jsDelivr CDN 加载，不需要构建。上传到任意静态托管（GitHub Pages、Cloudflare Pages、Nginx……）即可。本仓库已通过 GitHub Pages 从 `main` 分支根目录发布，推送后自动更新：https://liyucheng1997.github.io/389_lab-AI-rigger/
 
 访问者在“设置”里填自己的 Anthropic API Key。Key 默认只保存在当前标签页（sessionStorage），勾选“记住”才写入 localStorage；请求从浏览器直接发往 Anthropic（`dangerouslyAllowBrowser`），不经过你的服务器。因此不要在公开页面里预置你自己的 Key。
 
